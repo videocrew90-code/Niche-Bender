@@ -502,18 +502,21 @@ function channelContext() {
 // ══════════════════════════════════════════════
 // TAVILY SEARCH
 // ══════════════════════════════════════════════
-async function tavilySearch(query) {
+async function tavilySearch(query, options = {}) {
   const key = getKey('tavily'); if (!key) throw new Error('No Tavily key');
+  const body = {
+    api_key: key,
+    query,
+    search_depth: 'advanced',
+    include_answer: false,
+    max_results: 8,
+    include_domains: options.includeDomains || undefined,
+    time_range: options.timeRange || undefined, // 'day' | 'week' | 'month' | 'year'
+  };
   const res = await fetch('https://api.tavily.com/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: key,
-      query,
-      search_depth: 'advanced',
-      include_answer: true,
-      max_results: 8,
-    })
+    body: JSON.stringify(body)
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
@@ -570,33 +573,51 @@ async function findVideos() {
   const tavKey = getKey('tavily'); if (!tavKey) return;
   const groqKey = getKey('groq'); if (!groqKey) return;
 
-  const minViews = document.getElementById('min-views').value;
+  const minViews = parseInt(document.getElementById('min-views').value);
   const recency = document.getElementById('recency').value;
   const minViewsLabel = minViews >= 1000000 ? (minViews/1000000)+'M' : (minViews/1000)+'K';
-  const recencyLabel = {any:'',year:'2024 OR 2025',month:'2025'}[recency] || '';
+  // Real structured recency filter, not text baked into the query.
+  const timeRange = { any: undefined, year: 'year', month: 'month' }[recency];
 
   setFindLoading(true, 'Searching for viral YouTube videos…');
 
   try {
-    // Search Tavily for viral videos
-    const query = `viral YouTube videos ${srcNiche} ${minViewsLabel}+ views ${recencyLabel} site:youtube.com OR site:vidiq.com OR site:socialblade.com`;
-    const searchData = await tavilySearch(query);
+    // Query 1: niche + viral framing, restricted to youtube.com via include_domains
+    // (structured filter, not a "site:" string hack).
+    const query1 = `most viral breakout YouTube videos about ${srcNiche}, what made them blow up`;
+    const searchData = await tavilySearch(query1, {
+      includeDomains: ['youtube.com'],
+      timeRange,
+    });
 
-    // Also search for top performing
-    const query2 = `"${srcNiche}" YouTube most viewed videos ${recencyLabel} million views`;
-    const searchData2 = await tavilySearch(query2);
+    // Query 2: analysis/commentary sources that discuss the niche's viral videos
+    // specifically — avoids the generic "most viewed videos of all time" trap
+    // that phrases like "million views" trigger.
+    const query2 = `YouTube channels and videos in the "${srcNiche}" niche that went viral, breakdown of why`;
+    const searchData2 = await tavilySearch(query2, { timeRange });
 
     const combined = [
       ...(searchData.results || []),
       ...(searchData2.results || []),
     ].map(r => `Title: ${r.title}\nURL: ${r.url}\nSnippet: ${r.content?.slice(0,300) || ''}`).join('\n---\n');
 
+    if (!combined.trim()) {
+      toast('No results found — try a broader niche or lower the view threshold.');
+      setFindLoading(false);
+      return;
+    }
+
     setFindLoading(true, 'Analysing what makes them viral…');
 
-    // Use Groq to extract and analyse the videos
     const analysis = await groq(
-      `Here are search results about viral YouTube videos in the "${srcNiche}" niche:\n\n${combined}\n\nExtract the 5 most interesting viral videos from these results. For each, identify the viral formula — what makes it work.\n\nReturn ONLY valid JSON array, no markdown:\n[\n  {\n    "title": "exact or reconstructed video title",\n    "estimatedViews": "e.g. 2.3M",\n    "channel": "channel name if known",\n    "formula": "2-3 sentences: what makes this video work — hook style, structure, emotional driver, why it gets clicks",\n    "hookType": "one of: curiosity gap / before-after / controversy / simulation / forbidden knowledge / scale & spectacle / expert reveals"\n  }\n]`,
-      'You are a YouTube viral content analyst. Return only valid JSON, no commentary, no markdown fences.'
+      `Here are search results about viral YouTube videos, gathered while searching for the "${srcNiche}" niche:\n\n${combined}\n\n` +
+      `STRICT FILTER — apply before selecting anything:\n` +
+      `- Only include results that are clearly, specifically about "${srcNiche}" content. If a result is a music video, movie trailer, generic celebrity content, or an unrelated "most viewed videos of all time" listicle, DISCARD it even if it has huge view counts.\n` +
+      `- Only include videos plausibly at or above ${minViewsLabel} views based on the snippet/context. If view count isn't stated but the source strongly implies it's a major hit in this niche, you may include it — but never include something with no real connection to "${srcNiche}".\n` +
+      `- If fewer than 5 results genuinely qualify, return fewer rather than padding with irrelevant ones.\n\n` +
+      `For each qualifying video, identify the viral formula — what makes it work.\n\n` +
+      `Return ONLY valid JSON array, no markdown:\n[\n  {\n    "title": "exact or reconstructed video title",\n    "estimatedViews": "e.g. 2.3M",\n    "channel": "channel name if known",\n    "formula": "2-3 sentences: what makes this video work — hook style, structure, emotional driver, why it gets clicks",\n    "hookType": "one of: curiosity gap / before-after / controversy / simulation / forbidden knowledge / scale & spectacle / expert reveals"\n  }\n]`,
+      'You are a YouTube viral content analyst. You are strict about relevance — irrelevant high-view-count content is worse than no content. Return only valid JSON, no commentary, no markdown fences.'
     );
 
     let videos = [];
@@ -604,6 +625,12 @@ async function findVideos() {
       videos = JSON.parse(analysis.replace(/```json|```/g,'').trim());
     } catch {
       toast('Could not parse video results. Try again.'); setFindLoading(false); return;
+    }
+
+    if (videos.length === 0) {
+      toast('No genuinely relevant videos found — try a broader niche term.');
+      setFindLoading(false);
+      return;
     }
 
     state.foundVideos = videos;
