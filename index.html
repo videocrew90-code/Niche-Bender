@@ -692,32 +692,77 @@ const analysis = await groq(
   }
 }
 
+function extractYouTubeVideoId(url) {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtu\.be\/)([\w-]{11})/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+async function getYouTubeOEmbed(url) {
+  const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+  if (!res.ok) throw new Error('Could not find that video — check the link is public and correct.');
+  return res.json(); // { title, author_name, thumbnail_url, ... }
+}
+
+function setFindMode(mode) {
+  document.getElementById('mode-auto').style.display = mode === 'auto' ? '' : 'none';
+  document.getElementById('mode-manual').style.display = mode === 'manual' ? '' : 'none';
+  document.getElementById('mode-auto-btn').classList.toggle('btn-ghost', mode !== 'auto');
+  document.getElementById('mode-manual-btn').classList.toggle('btn-ghost', mode !== 'manual');
+}
+
 async function analyzeVideoUrl() {
   const url = document.getElementById('manual-url').value.trim();
   if (!url) { toast('Paste a YouTube URL first.'); return; }
-  if (!/youtube\.com|youtu\.be/.test(url)) { toast('That doesn\'t look like a YouTube link.'); return; }
+  const videoId = extractYouTubeVideoId(url);
+  if (!videoId) { toast('That doesn\'t look like a valid YouTube video link.'); return; }
   const groqKey = getKey('groq'); if (!groqKey) return;
 
-  setAnalyzeUrlLoading(true, 'Reading the video page…');
+  setAnalyzeUrlLoading(true, 'Fetching video info from YouTube…');
 
   try {
-    const page = await tavilyExtract(url);
-    const content = (page.raw_content || '').slice(0, 4000);
-    if (!content.trim()) throw new Error('Page had no readable content — video may be private or region-locked.');
+    // Real metadata straight from YouTube — never guessed.
+    const oembed = await getYouTubeOEmbed(url);
+    const title = oembed.title || '(title unavailable)';
+    const channel = oembed.author_name || null;
+
+    setAnalyzeUrlLoading(true, 'Looking for extra context…');
+
+    // Best-effort: search for extra context (view counts, discussion of why
+    // it did well). This can come back empty — that's fine, it's optional.
+    let extraContext = '';
+    try {
+      const tavKey = getKey('tavily');
+      if (tavKey) {
+        const searchData = await tavilySearch(`"${title}" ${channel || ''} views`, {});
+        extraContext = (searchData.results || [])
+          .map(r => `Title: ${r.title}\nSnippet: ${r.content?.slice(0,300) || ''}`)
+          .join('\n---\n');
+      }
+    } catch { /* optional — ignore failures */ }
 
     setAnalyzeUrlLoading(true, 'Breaking down the viral formula…');
 
     const analysis = await groq(
-      `Here is the page content for a YouTube video someone found and wants to analyse:\n\nURL: ${url}\n\nPAGE CONTENT:\n${content}\n\n` +
+      `A user found this YouTube video and wants it analysed for a "niche bending" tool:\n\n` +
+      `Confirmed title (from YouTube directly): ${title}\n` +
+      `Confirmed channel (from YouTube directly): ${channel || 'unknown'}\n` +
+      `URL: ${url}\n\n` +
+      (extraContext ? `Additional context found via web search (may or may not be relevant, verify before trusting):\n${extraContext}\n\n` : `No additional web context was found for this video.\n\n`) +
       `STRICT RULES:\n` +
-      `1. Only report a view count if a specific number is explicitly present in the content above. Otherwise set "estimatedViews" to null — never guess.\n` +
-      `2. Identify the actual title and channel from the content, don't invent them.\n` +
-      `3. "niche" should be your best short label for what content category/niche this video belongs to (2-5 words).\n\n` +
+      `1. Only report a view count if a specific number is explicitly present in the additional context above. Otherwise set "estimatedViews" to null — never guess or estimate.\n` +
+      `2. Use the CONFIRMED title and channel exactly as given above — do not alter them.\n` +
+      `3. "niche" should be your best short label for what content category this video belongs to (2-5 words), based on the title.\n\n` +
       `Also generate:\n` +
-      `- "keywords": 6-8 specific YouTube search phrases someone could type into YouTube's search bar to find more videos like this one in the same niche.\n` +
-      `- "filterTips": a short paragraph (3-4 sentences) explaining exactly how to use YouTube's own search filters (the Filters button under the search bar: Upload date, Type, Duration, Sort by) to narrow those keyword searches down to genuinely viral, recent hits — be specific about which filter settings to pick and why, tailored to this niche.\n\n` +
-      `Return ONLY valid JSON, no markdown:\n{\n  "title": "actual title",\n  "url": "${url}",\n  "estimatedViews": "exact number from content or null",\n  "channel": "channel name or null",\n  "niche": "short niche label",\n  "formula": "2-3 sentences on what makes this video work — hook style, structure, emotional driver",\n  "hookType": "one of: curiosity gap / before-after / controversy / simulation / forbidden knowledge / scale & spectacle / expert reveals",\n  "keywords": ["...", "..."],\n  "filterTips": "..."\n}`,
-      'You are a YouTube viral content analyst. You never fabricate view counts or facts not present in the source. Return only valid JSON, no commentary, no markdown fences.'
+      `- "keywords": 6-8 specific YouTube search phrases to find more videos like this one in the same niche.\n` +
+      `- "filterTips": a short paragraph (3-4 sentences) on exactly how to use YouTube's own Filters (Upload date, Type, Duration, Sort by) to narrow those searches to genuinely big, recent hits in this niche.\n\n` +
+      `Return ONLY valid JSON, no markdown:\n{\n  "title": "${title.replace(/"/g,'\\"')}",\n  "url": "${url}",\n  "estimatedViews": "exact number from context or null",\n  "channel": ${channel ? `"${channel.replace(/"/g,'\\"')}"` : 'null'},\n  "niche": "short niche label",\n  "formula": "2-3 sentences on what makes this video work — hook style, structure, emotional driver",\n  "hookType": "one of: curiosity gap / before-after / controversy / simulation / forbidden knowledge / scale & spectacle / expert reveals",\n  "keywords": ["...", "..."],\n  "filterTips": "..."\n}`,
+      'You are a YouTube viral content analyst. You never fabricate view counts or facts. Return only valid JSON, no commentary, no markdown fences.'
     );
 
     let video;
@@ -726,6 +771,11 @@ async function analyzeVideoUrl() {
     } catch {
       toast('Could not parse the analysis. Try again.'); setAnalyzeUrlLoading(false); return;
     }
+
+    // oEmbed data is ground truth — always win over anything Groq touched.
+    video.title = title;
+    video.channel = channel;
+    video.url = url;
 
     state.foundVideos = [video];
     state.selectedVideo = 0;
