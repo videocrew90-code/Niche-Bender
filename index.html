@@ -609,15 +609,16 @@ async function findVideos() {
 
     setFindLoading(true, 'Analysing what makes them viral…');
 
-    const analysis = await groq(
+const analysis = await groq(
       `Here are search results about viral YouTube videos, gathered while searching for the "${srcNiche}" niche:\n\n${combined}\n\n` +
-      `STRICT FILTER — apply before selecting anything:\n` +
-      `- Only include results that are clearly, specifically about "${srcNiche}" content. If a result is a music video, movie trailer, generic celebrity content, or an unrelated "most viewed videos of all time" listicle, DISCARD it even if it has huge view counts.\n` +
-      `- Only include videos plausibly at or above ${minViewsLabel} views based on the snippet/context. If view count isn't stated but the source strongly implies it's a major hit in this niche, you may include it — but never include something with no real connection to "${srcNiche}".\n` +
-      `- If fewer than 5 results genuinely qualify, return fewer rather than padding with irrelevant ones.\n\n` +
+      `STRICT RULES — follow exactly:\n` +
+      `1. RELEVANCE: Only include results clearly, specifically about "${srcNiche}" content. Discard music videos, movie trailers, celebrity content, or generic "most viewed of all time" listicles even if they have huge view counts.\n` +
+      `2. URL: For every result you include, copy the "URL:" field EXACTLY as given in the source above. Never invent, guess, or modify a URL. If a result has no URL, don't include it.\n` +
+      `3. VIEW COUNTS — this is critical: Only report a view count if it is EXPLICITLY stated as a number in the Title or Snippet text above (e.g. "2.3M views", "500,000 views"). If no number is stated anywhere in the source text, set "estimatedViews" to null — do NOT guess, estimate, or infer a plausible-sounding number. A fabricated view count is a serious error.\n` +
+      `4. If fewer than 5 results genuinely qualify under rules 1-3, return fewer. Do not pad with weaker matches.\n\n` +
       `For each qualifying video, identify the viral formula — what makes it work.\n\n` +
-      `Return ONLY valid JSON array, no markdown:\n[\n  {\n    "title": "exact or reconstructed video title",\n    "estimatedViews": "e.g. 2.3M",\n    "channel": "channel name if known",\n    "formula": "2-3 sentences: what makes this video work — hook style, structure, emotional driver, why it gets clicks",\n    "hookType": "one of: curiosity gap / before-after / controversy / simulation / forbidden knowledge / scale & spectacle / expert reveals"\n  }\n]`,
-      'You are a YouTube viral content analyst. You are strict about relevance — irrelevant high-view-count content is worse than no content. Return only valid JSON, no commentary, no markdown fences.'
+      `Return ONLY valid JSON array, no markdown:\n[\n  {\n    "title": "exact title from source",\n    "url": "exact URL copied from source",\n    "estimatedViews": "exact number/text from source, or null if not stated — never guessed",\n    "channel": "channel name if known, else null",\n    "formula": "2-3 sentences: what makes this video work — hook style, structure, emotional driver, why it gets clicks",\n    "hookType": "one of: curiosity gap / before-after / controversy / simulation / forbidden knowledge / scale & spectacle / expert reveals"\n  }\n]`,
+      'You are a YouTube viral content analyst. You never fabricate data. If a number is not explicitly present in the source text, you output null for it rather than guessing. Return only valid JSON, no commentary, no markdown fences.'
     );
 
     let videos = [];
@@ -660,9 +661,10 @@ function renderVideoGrid(videos) {
       <span class="video-check">✓</span>
       <div class="video-title">${esc(v.title)}</div>
       <div class="video-meta">
-        ${v.estimatedViews ? `<span>~${esc(v.estimatedViews)} views</span>` : ''}
+        ${v.estimatedViews ? `<span>~${esc(v.estimatedViews)} views</span>` : `<span style="color:var(--hint);">views not confirmed</span>`}
         ${v.channel ? `<span>${esc(v.channel)}</span>` : ''}
         ${v.hookType ? `<span style="color:var(--accent-text);font-weight:600;">${esc(v.hookType)}</span>` : ''}
+        ${v.url ? `<a href="${esc(v.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);">source ↗</a>` : ''}
       </div>
       <div class="video-why">${esc(v.formula)}</div>
     </div>`).join('');
