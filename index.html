@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NicheBender — YouTube formula finder</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --s1: #111118;
+  --s2: #18181f;
+  --s3: #222230;
+  --border: #2a2a3a;
+  --border2: #3a3a50;
+  --text: #eeeaf8;
+  --muted: #7a7890;
+  --hint: #44425a;
+  --accent: #7c6af5;
+  --accent-dim: #1a1635;
+  --accent-text: #b0a8ff;
+  --green: #5aad7e;
+  --green-dim: #0f2a1e;
+  --red: #e06060;
+  --red-dim: #2e1010;
+  --gold: #f0b840;
+  --gold-dim: #2a200a;
+  --radius: 10px;
+  --rsm: 6px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);min-height:100vh;font-family:'Inter',system-ui,sans-serif;font-size:15px;line-height:1.6;}
+
+.app{display:flex;min-height:100vh;}
+
+/* ── Sidebar ── */
+.sidebar{width:215px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 0;position:sticky;top:0;height:100vh;overflow-y:auto;}
+.logo{padding:0 18px 20px;border-bottom:1px solid var(--border);margin-bottom:14px;}
+.logo-name{font-size:17px;font-weight:800;letter-spacing:-.5px;}
+.logo-name span{color:var(--accent);}
+.logo-tag{font-size:11px;color:var(--muted);margin-top:2px;}
+.nav{display:flex;flex-direction:column;gap:1px;padding:0 8px;flex:1;}
+.nav-label{font-size:10px;letter-spacing:.8px;color:var(--hint);text-transform:uppercase;padding:12px 10px 4px;font-weight:600;}
+.nb{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:var(--rsm);border:none;background:none;color:var(--muted);font-size:13.5px;cursor:pointer;text-align:left;width:100%;transition:all .15s;font-family:inherit;}
+.nb:hover{background:var(--s2);color:var(--text);}
+.nb.active{background:var(--accent-dim);color:var(--accent-text);}
+.nb-icon{font-size:15px;width:18px;text-align:center;flex-shrink:0;}
+
+.main{flex:1;min-width:0;padding:32px 36px;max-width:900px;}
+
+/* ── Panels ── */
+.panel{display:none;}
+.panel.active{display:block;}
+.ptitle{font-size:23px;font-weight:800;letter-spacing:-.6px;margin-bottom:3px;}
+.psub{color:var(--muted);font-size:13.5px;margin-bottom:26px;line-height:1.6;}
+
+/* ── Form ── */
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;letter-spacing:.2px;font-weight:500;}
+input[type=text],input[type=password],input[type=url],textarea,select{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:var(--rsm);color:var(--text);font-size:14px;padding:9px 12px;font-family:inherit;line-height:1.5;transition:border-color .15s;resize:vertical;}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);}
+select option{background:var(--s2);}
+.field{margin-bottom:16px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.field-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:var(--rsm);border:1px solid var(--border2);background:var(--s2);color:var(--text);font-size:14px;font-family:inherit;cursor:pointer;transition:all .15s;font-weight:500;white-space:nowrap;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;}
+.btn-primary:hover{background:#9080ff;border-color:#9080ff;color:#fff;}
+.btn-sm{padding:6px 12px;font-size:13px;}
+.btn-ghost{background:none;border-color:transparent;color:var(--muted);}
+.btn-ghost:hover{background:var(--s2);color:var(--text);border-color:var(--border);}
+.btn-gold{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);font-weight:600;}
+.btn-gold:hover{background:var(--gold);color:#1a1000;}
+
+/* ── Cards ── */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:14px;}
+.card-title{font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
+
+/* ── Section title ── */
+.section-title{font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:var(--hint);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);font-weight:600;}
+
+/* ── Loading ── */
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.loading-bar{height:2px;background:linear-gradient(90deg,var(--accent-dim),var(--accent),var(--accent-dim));background-size:200%;animation:shimmer 1.2s infinite linear;border-radius:1px;margin-bottom:10px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+
+/* ── Source video cards ── */
+.video-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
+.video-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;transition:all .15s;}
+.video-card:hover{border-color:var(--border2);}
+.video-card.selected{border-color:var(--accent);background:var(--accent-dim);}
+.video-title{font-size:14px;font-weight:600;margin-bottom:4px;line-height:1.4;}
+.video-card.selected .video-title{color:var(--accent-text);}
+.video-meta{font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;}
+.video-why{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.5;display:none;}
+.video-card.selected .video-why{display:block;color:var(--accent-text);opacity:.85;}
+.video-check{float:right;color:var(--accent);font-size:16px;display:none;}
+.video-card.selected .video-check{display:inline;}
+
+/* ── Bend output ── */
+.bend-output{background:var(--s1);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px;}
+.bend-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--border);}
+.bend-header-left{font-size:13px;font-weight:700;color:var(--accent-text);display:flex;align-items:center;gap:8px;}
+.bend-body{padding:18px 20px;}
+
+/* Title options */
+.title-options{display:flex;flex-direction:column;gap:8px;margin-bottom:0;}
+.title-opt{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--s2);border:1px solid var(--border);border-radius:var(--rsm);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;gap:10px;}
+.title-opt:hover{border-color:var(--accent);color:var(--accent-text);}
+.title-opt-copy{font-size:11px;color:var(--muted);flex-shrink:0;padding:3px 8px;border:1px solid var(--border);border-radius:20px;background:none;cursor:pointer;font-family:inherit;transition:all .15s;}
+.title-opt-copy:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Script outline */
+.script-section{margin-bottom:18px;}
+.script-section-label{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--accent);margin-bottom:8px;}
+.script-section-body{font-size:14px;line-height:1.75;color:var(--text);white-space:pre-wrap;}
+
+/* Thumbnail concept */
+.thumbnail-box{background:var(--s3);border:1px solid var(--border2);border-radius:var(--rsm);padding:14px 16px;margin-bottom:0;}
+.thumbnail-box-label{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;}
+.thumbnail-box-body{font-size:13.5px;line-height:1.6;color:var(--text);}
+
+/* ── Niche tags ── */
+.niche-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.ntag{padding:5px 12px;border-radius:20px;border:1px solid var(--border2);background:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;}
+.ntag:hover{border-color:var(--border2);color:var(--text);}
+.ntag.selected{background:var(--accent-dim);border-color:var(--accent);color:var(--accent-text);font-weight:600;}
+
+/* ── Chat ── */
+.chat-messages{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;max-height:300px;overflow-y:auto;}
+.msg{padding:10px 14px;border-radius:var(--rsm);font-size:14px;line-height:1.6;white-space:pre-wrap;}
+.msg-user{background:var(--s3);border:1px solid var(--border2);}
+.msg-ai{background:var(--s1);border:1px solid var(--border);color:var(--text);}
+.chat-input-row{display:flex;gap:8px;align-items:flex-end;}
+.chat-input-row textarea{min-height:56px;resize:none;flex:1;}
+
+/* ── Divider ── */
+hr{border:none;border-top:1px solid var(--border);margin:22px 0;}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:22px;right:22px;background:var(--s3);border:1px solid var(--border2);color:var(--text);padding:9px 15px;border-radius:var(--rsm);font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:999;}
+#toast.show{opacity:1;}
+
+.hint{font-size:12px;color:var(--hint);margin-top:4px;}
+.status-text{font-size:13px;color:var(--muted);margin-top:8px;min-height:20px;}
+
+@media(max-width:640px){
+  .sidebar{display:none;}
+  .main{padding:18px 14px;}
+  .field-row,.field-row-3{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ── Sidebar ── -->
+<nav class="sidebar">
+  <div class="logo">
+    <div class="logo-name">Niche<span>Bender</span></div>
+    <div class="logo-tag">YouTube formula finder</div>
+  </div>
+  <div class="nav">
+    <div class="nav-label">Tools</div>
+    <button class="nb active" onclick="showPanel('bend')" data-panel="bend">
+      <span class="nb-icon">⚡</span> Bend a niche
+    </button>
+    <button class="nb" onclick="showPanel('saved')" data-panel="saved">
+      <span class="nb-icon">◈</span> Saved bends
+    </button>
+    <div class="nav-label">You</div>
+    <button class="nb" onclick="showPanel('channel')" data-panel="channel">
+      <span class="nb-icon">◉</span> Your channel
+    </button>
+    <button class="nb" onclick="showPanel('settings')" data-panel="settings">
+      <span class="nb-icon">⚙</span> Settings
+    </button>
+  </div>
+</nav>
+
+<!-- ── Main ── -->
+<main class="main">
+
+  <!-- ════ BEND PANEL ════ -->
+  <div id="panel-bend" class="panel active">
+    <div class="ptitle">Bend a niche</div>
+    <div class="psub">Pick a niche with proven viral videos. Pick where you want to take that formula. Get titles, hooks, thumbnail concepts, and a full script outline — ready to record.</div>
+
+    <!-- Step 1: Niches -->
+    <div class="card">
+      <div class="card-title">Step 1 — Where to steal from</div>
+      <div class="field">
+        <label for="src-niche">Source niche <span style="color:var(--hint)">(where the viral formula lives)</span></label>
+        <input type="text" id="src-niche" placeholder="e.g. Amish building, ancient Roman engineering, military logistics, ant colonies…" />
+        <div class="niche-tags" id="src-suggestions">
+          <button class="ntag" onclick="setNiche('src-niche',this)">Amish / traditional building</button>
+          <button class="ntag" onclick="setNiche('src-niche',this)">Ancient Roman engineering</button>
+          <button class="ntag" onclick="setNiche('src-niche',this)">Military logistics</button>
+          <button class="ntag" onclick="setNiche('src-niche',this)">Ant / bee colonies</button>
+          <button class="ntag" onclick="setNiche('src-niche',this)">True crime</button>
+          <button class="ntag" onclick="setNiche('src-niche',this)">1000 player simulations</button>
+          <button class="ntag" onclick="setNiche('src-niche',this)">Dangerous jobs</button>
+          <button class="ntag" onclick="setNiche('src-niche',this)">Abandoned places</button>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:0;">
+        <label for="target-niche">Target niche <span style="color:var(--hint)">(where you want to take it)</span></label>
+        <input type="text" id="target-niche" placeholder="e.g. psychology, personal finance, AI, agriculture, business systems…" />
+        <div class="niche-tags">
+          <button class="ntag" onclick="setNiche('target-niche',this)">Psychology</button>
+          <button class="ntag" onclick="setNiche('target-niche',this)">Personal finance</button>
+          <button class="ntag" onclick="setNiche('target-niche',this)">AI & tech</button>
+          <button class="ntag" onclick="setNiche('target-niche',this)">Business systems</button>
+          <button class="ntag" onclick="setNiche('target-niche',this)">Health & longevity</button>
+          <button class="ntag" onclick="setNiche('target-niche',this)">History</button>
+          <button class="ntag" onclick="setNiche('target-niche',this)">Architecture</button>
+          <button class="ntag" onclick="setNiche('target-niche',this)">Emergency prep</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Find videos -->
+    <div class="card">
+      <div class="card-title">Step 2 — Find viral videos to bend</div>
+      <div class="field-row" style="margin-bottom:12px;">
+        <div>
+          <label for="min-views">Minimum views</label>
+          <select id="min-views">
+            <option value="100000">100K+</option>
+            <option value="500000" selected>500K+</option>
+            <option value="1000000">1M+</option>
+            <option value="5000000">5M+</option>
+          </select>
+        </div>
+        <div>
+          <label for="recency">Recency</label>
+          <select id="recency">
+            <option value="any">Any time</option>
+            <option value="year" selected>Past year</option>
+            <option value="month">Past month</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="findVideos()" id="find-btn">
+        Find viral videos ⚡
+      </button>
+      <div id="find-loading" style="display:none;margin-top:12px;">
+        <div class="loading-bar"></div>
+        <div class="status-text" id="find-status"></div>
+      </div>
+    </div>
+
+    <!-- Video results -->
+    <div id="video-results-wrap" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--muted);">SELECT A VIDEO TO BEND</div>
+        <button class="btn btn-sm btn-ghost" onclick="findVideos()">Refresh ↺</button>
+      </div>
+      <div class="video-grid" id="video-grid"></div>
+
+      <!-- Step 3: Bend settings -->
+      <div class="card" id="bend-settings" style="display:none;">
+        <div class="card-title">Step 3 — How to bend it</div>
+        <div class="field">
+          <label for="bend-count">Number of video ideas to generate</label>
+          <select id="bend-count">
+            <option value="3">3 ideas</option>
+            <option value="5" selected>5 ideas</option>
+            <option value="10">10 ideas</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label for="bend-angle">Any specific angle or constraint? <span style="color:var(--hint)">(optional)</span></label>
+          <input type="text" id="bend-angle" placeholder="e.g. faceless format, cinematic 3D style, make it contrarian, target beginners…" />
+        </div>
+      </div>
+
+      <div id="bend-action-wrap" style="display:none;margin-bottom:20px;">
+        <button class="btn btn-primary" style="font-size:15px;padding:11px 24px;" onclick="runBend()" id="bend-btn">
+          Bend this formula ⟳
+        </button>
+        <div id="bend-loading" style="display:none;margin-top:12px;">
+          <div class="loading-bar"></div>
+          <div class="status-text" id="bend-status"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bend outputs -->
+    <div id="bend-outputs" style="display:none;">
+      <hr />
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px;">Your bent video ideas</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:20px;">Based on the viral formula — ready to record. Click any title to copy it.</div>
+      <div id="bend-cards"></div>
+
+      <!-- Refine chat -->
+      <hr />
+      <div style="font-size:16px;font-weight:700;margin-bottom:3px;">Refine or explore further</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Ask for more bends, different angles, longer scripts, thumbnail variations, or bend into another niche entirely.</div>
+      <div class="chat-messages" id="bend-chat-messages"></div>
+      <div class="chat-input-row">
+        <textarea id="bend-chat-input" placeholder="Give me 3 more ideas but make them more contrarian. Write a full script for idea #2. Bend this same formula into the finance niche instead. Make the titles more clickbaity…" rows="2" onkeydown="bendChatKey(event)"></textarea>
+        <button class="btn btn-primary btn-sm" onclick="sendBendChat()">Send ↑</button>
+      </div>
+      <div class="hint" style="margin-top:6px;">Enter to send, Shift+Enter for new line.</div>
+
+      <!-- Save -->
+      <div style="margin-top:16px;">
+        <button class="btn btn-gold" onclick="saveBend()">Save this bend ◈</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ SAVED BENDS ════ -->
+  <div id="panel-saved" class="panel">
+    <div class="ptitle">Saved bends</div>
+    <div class="psub">Your saved niche bends — ready to revisit, expand, or record.</div>
+    <div id="saved-list"></div>
+    <div id="saved-empty" style="color:var(--muted);font-size:14px;display:none;">No saved bends yet. Run a bend and hit "Save this bend".</div>
+  </div>
+
+  <!-- ════ CHANNEL PROFILE ════ -->
+  <div id="panel-channel" class="panel">
+    <div class="ptitle">Your channel</div>
+    <div class="psub">This context shapes every output — titles, hooks, and scripts are tailored to your style and audience.</div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="section-title">Channel basics</div>
+      <div class="field-row">
+        <div><label for="ch-name">Channel name</label><input type="text" id="ch-name" placeholder="e.g. Systems Edge" /></div>
+        <div><label for="ch-niche">Your niche</label><input type="text" id="ch-niche" placeholder="e.g. resilient systems, psychology, finance" /></div>
+      </div>
+      <div class="field"><label for="ch-audience">Target audience</label><input type="text" id="ch-audience" placeholder="e.g. 25–45 year old men interested in self-sufficiency and systems thinking" /></div>
+      <div class="field"><label for="ch-style">Video style</label>
+        <select id="ch-style">
+          <option value="faceless">Faceless / voiceover</option>
+          <option value="cinematic">Cinematic 3D / AI visuals</option>
+          <option value="talking-head">Talking head</option>
+          <option value="documentary">Documentary style</option>
+          <option value="animation">Animation</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label for="ch-avoid">Things to avoid</label><textarea id="ch-avoid" rows="2" placeholder="e.g. no clickbait, no political content, keep it educational not entertainment…"></textarea></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Tone & examples</div>
+      <div class="field"><label for="ch-tone">Describe your tone</label><input type="text" id="ch-tone" placeholder="e.g. calm, authoritative, slightly contrarian, like a professor who's also been to war" /></div>
+      <div class="field" style="margin-bottom:0;"><label for="ch-examples">Titles of your best performing videos <span style="color:var(--hint)">(optional)</span></label><textarea id="ch-examples" rows="3" placeholder="Paste titles of videos that did well — helps the AI match what already works for your channel."></textarea></div>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveChannel()">Save channel ✓</button>
+    <span id="channel-saved" style="font-size:13px;color:var(--green);margin-left:12px;display:none;">Saved!</span>
+  </div>
+
+  <!-- ════ SETTINGS ════ -->
+  <div id="panel-settings" class="panel">
+    <div class="ptitle">Settings</div>
+    <div class="psub">Everything runs in your browser. Keys are stored locally and never sent anywhere except the respective APIs.</div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">Tavily API key — for finding viral videos</div>
+      <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px;">Free at <a href="https://app.tavily.com" target="_blank" style="color:var(--accent);">app.tavily.com</a> — 1,000 free searches/month.</p>
+      <div class="field" style="margin-bottom:12px;">
+        <label for="s-tavily">Tavily API key</label>
+        <input type="password" id="s-tavily" placeholder="tvly-…" />
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveKey('tavily')">Save</button>
+      <span id="tavily-saved" style="font-size:13px;color:var(--green);margin-left:10px;display:none;">Saved!</span>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="section-title">Groq API key — for generating scripts & titles</div>
+      <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px;">Free at <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a> — very fast, very generous free tier.</p>
+      <div class="field" style="margin-bottom:12px;">
+        <label for="s-groq">Groq API key</label>
+        <input type="password" id="s-groq" placeholder="gsk_…" />
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveKey('groq')">Save</button>
+      <span id="groq-saved" style="font-size:13px;color:var(--green);margin-left:10px;display:none;">Saved!</span>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Data</div>
+      <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px;">All data stored locally in your browser.</p>
+      <button class="btn btn-sm" style="border-color:var(--red);color:var(--red);" onclick="clearAll()">Clear all local data</button>
+    </div>
+  </div>
+
+</main>
+</div>
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let state = {
+  foundVideos: [],
+  selectedVideo: null,
+  bendResults: [],
+  chatHistory: [],
+  lastSrcNiche: '',
+  lastTargetNiche: '',
+};
+
+// ══════════════════════════════════════════════
+// STORAGE
+// ══════════════════════════════════════════════
+const S = {
+  get: k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set: (k, v) => localStorage.setItem(k, JSON.stringify(v)),
+};
+
+// ══════════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════════
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  document.querySelector(`[data-panel="${id}"]`)?.classList.add('active');
+  if (id === 'saved') renderSaved();
+}
+
+// ══════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════
+function toast(msg, dur=2800) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ══════════════════════════════════════════════
+// NICHE TAGS
+// ══════════════════════════════════════════════
+function setNiche(inputId, btn) {
+  document.getElementById(inputId).value = btn.textContent;
+  btn.closest('.niche-tags').querySelectorAll('.ntag').forEach(t => t.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+// ══════════════════════════════════════════════
+// KEYS
+// ══════════════════════════════════════════════
+function saveKey(name) {
+  const val = document.getElementById('s-' + name).value.trim();
+  if (!val) { toast('Paste your key first.'); return; }
+  S.set(name + '_key', val);
+  const el = document.getElementById(name + '-saved');
+  el.style.display = 'inline'; setTimeout(() => el.style.display = 'none', 2000);
+}
+function getKey(name) {
+  const k = S.get(name + '_key');
+  if (!k) { toast(`Add your ${name} API key in Settings first.`); showPanel('settings'); return null; }
+  return k;
+}
+function loadKeys() {
+  ['tavily','groq'].forEach(n => {
+    const k = S.get(n + '_key');
+    if (k) document.getElementById('s-' + n).value = k;
+  });
+}
+function clearAll() {
+  if (!confirm('Clear all local data?')) return;
+  localStorage.clear(); toast('Cleared.'); loadKeys(); loadChannel();
+}
+
+// ══════════════════════════════════════════════
+// CHANNEL PROFILE
+// ══════════════════════════════════════════════
+const CH_FIELDS = ['ch-name','ch-niche','ch-audience','ch-style','ch-tone','ch-avoid','ch-examples'];
+function saveChannel() {
+  const d = {};
+  CH_FIELDS.forEach(id => d[id] = document.getElementById(id).value.trim());
+  S.set('channel', d);
+  const el = document.getElementById('channel-saved');
+  el.style.display = 'inline'; setTimeout(() => el.style.display = 'none', 2000);
+}
+function loadChannel() {
+  const d = S.get('channel') || {};
+  CH_FIELDS.forEach(id => { if (d[id]) document.getElementById(id).value = d[id]; });
+}
+function channelContext() {
+  const c = S.get('channel') || {};
+  const lines = [];
+  if (c['ch-name']) lines.push(`Channel: ${c['ch-name']}`);
+  if (c['ch-niche']) lines.push(`Channel niche: ${c['ch-niche']}`);
+  if (c['ch-audience']) lines.push(`Audience: ${c['ch-audience']}`);
+  if (c['ch-style']) lines.push(`Video style: ${c['ch-style']}`);
+  if (c['ch-tone']) lines.push(`Tone: ${c['ch-tone']}`);
+  if (c['ch-avoid']) lines.push(`Avoid: ${c['ch-avoid']}`);
+  if (c['ch-examples']) lines.push(`Proven titles on this channel:\n${c['ch-examples']}`);
+  return lines.length ? lines.join('\n') : null;
+}
+
+// ══════════════════════════════════════════════
+// TAVILY SEARCH
+// ══════════════════════════════════════════════
+async function tavilySearch(query) {
+  const key = getKey('tavily'); if (!key) throw new Error('No Tavily key');
+  const res = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: key,
+      query,
+      search_depth: 'advanced',
+      include_answer: true,
+      max_results: 8,
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// ══════════════════════════════════════════════
+// GROQ GENERATION
+// ══════════════════════════════════════════════
+async function groq(prompt, systemPrompt = '') {
+  const key = getKey('groq'); if (!key) throw new Error('No Groq key');
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  messages.push({ role: 'user', content: prompt });
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages,
+      temperature: 0.85,
+      max_tokens: 4000,
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.choices[0].message.content.trim();
+}
+
+async function groqChat(messages) {
+  const key = getKey('groq'); if (!key) throw new Error('No Groq key');
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages,
+      temperature: 0.85,
+      max_tokens: 4000,
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.choices[0].message.content.trim();
+}
+
+// ══════════════════════════════════════════════
+// FIND VIRAL VIDEOS
+// ══════════════════════════════════════════════
+async function findVideos() {
+  const srcNiche = document.getElementById('src-niche').value.trim();
+  if (!srcNiche) { toast('Enter a source niche first.'); return; }
+  const tavKey = getKey('tavily'); if (!tavKey) return;
+  const groqKey = getKey('groq'); if (!groqKey) return;
+
+  const minViews = document.getElementById('min-views').value;
+  const recency = document.getElementById('recency').value;
+  const minViewsLabel = minViews >= 1000000 ? (minViews/1000000)+'M' : (minViews/1000)+'K';
+  const recencyLabel = {any:'',year:'2024 OR 2025',month:'2025'}[recency] || '';
+
+  setFindLoading(true, 'Searching for viral YouTube videos…');
+
+  try {
+    // Search Tavily for viral videos
+    const query = `viral YouTube videos ${srcNiche} ${minViewsLabel}+ views ${recencyLabel} site:youtube.com OR site:vidiq.com OR site:socialblade.com`;
+    const searchData = await tavilySearch(query);
+
+    // Also search for top performing
+    const query2 = `"${srcNiche}" YouTube most viewed videos ${recencyLabel} million views`;
+    const searchData2 = await tavilySearch(query2);
+
+    const combined = [
+      ...(searchData.results || []),
+      ...(searchData2.results || []),
+    ].map(r => `Title: ${r.title}\nURL: ${r.url}\nSnippet: ${r.content?.slice(0,300) || ''}`).join('\n---\n');
+
+    setFindLoading(true, 'Analysing what makes them viral…');
+
+    // Use Groq to extract and analyse the videos
+    const analysis = await groq(
+      `Here are search results about viral YouTube videos in the "${srcNiche}" niche:\n\n${combined}\n\nExtract the 5 most interesting viral videos from these results. For each, identify the viral formula — what makes it work.\n\nReturn ONLY valid JSON array, no markdown:\n[\n  {\n    "title": "exact or reconstructed video title",\n    "estimatedViews": "e.g. 2.3M",\n    "channel": "channel name if known",\n    "formula": "2-3 sentences: what makes this video work — hook style, structure, emotional driver, why it gets clicks",\n    "hookType": "one of: curiosity gap / before-after / controversy / simulation / forbidden knowledge / scale & spectacle / expert reveals"\n  }\n]`,
+      'You are a YouTube viral content analyst. Return only valid JSON, no commentary, no markdown fences.'
+    );
+
+    let videos = [];
+    try {
+      videos = JSON.parse(analysis.replace(/```json|```/g,'').trim());
+    } catch {
+      toast('Could not parse video results. Try again.'); setFindLoading(false); return;
+    }
+
+    state.foundVideos = videos;
+    state.lastSrcNiche = srcNiche;
+    renderVideoGrid(videos);
+    document.getElementById('video-results-wrap').style.display = 'block';
+    document.getElementById('video-results-wrap').scrollIntoView({ behavior:'smooth', block:'start' });
+
+  } catch(err) {
+    toast('Error: ' + err.message);
+  } finally {
+    setFindLoading(false);
+  }
+}
+
+function setFindLoading(on, msg='') {
+  document.getElementById('find-loading').style.display = on ? '' : 'none';
+  document.getElementById('find-status').textContent = msg;
+  document.getElementById('find-btn').disabled = on;
+  document.getElementById('find-btn').textContent = on ? 'Searching…' : 'Find viral videos ⚡';
+}
+
+function renderVideoGrid(videos) {
+  const grid = document.getElementById('video-grid');
+  grid.innerHTML = videos.map((v, i) => `
+    <div class="video-card" id="vc-${i}" onclick="selectVideo(${i})">
+      <span class="video-check">✓</span>
+      <div class="video-title">${esc(v.title)}</div>
+      <div class="video-meta">
+        ${v.estimatedViews ? `<span>~${esc(v.estimatedViews)} views</span>` : ''}
+        ${v.channel ? `<span>${esc(v.channel)}</span>` : ''}
+        ${v.hookType ? `<span style="color:var(--accent-text);font-weight:600;">${esc(v.hookType)}</span>` : ''}
+      </div>
+      <div class="video-why">${esc(v.formula)}</div>
+    </div>`).join('');
+}
+
+function selectVideo(i) {
+  state.selectedVideo = i;
+  document.querySelectorAll('.video-card').forEach((c,j) => c.classList.toggle('selected', j===i));
+  document.getElementById('bend-settings').style.display = 'block';
+  document.getElementById('bend-action-wrap').style.display = 'block';
+  document.getElementById('bend-settings').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// ══════════════════════════════════════════════
+// RUN BEND
+// ══════════════════════════════════════════════
+async function runBend() {
+  if (state.selectedVideo === null) { toast('Select a video first.'); return; }
+  const targetNiche = document.getElementById('target-niche').value.trim();
+  if (!targetNiche) { toast('Enter a target niche.'); return; }
+  const groqKey = getKey('groq'); if (!groqKey) return;
+
+  const video = state.foundVideos[state.selectedVideo];
+  const count = parseInt(document.getElementById('bend-count').value);
+  const angle = document.getElementById('bend-angle').value.trim();
+  const channel = channelContext();
+
+  setBendLoading(true, 'Bending the formula into your niche…');
+
+  try {
+    const result = await groq(
+      `You are a YouTube niche bending expert. Your job is to take a proven viral formula from one niche and transplant it perfectly into another niche.
+
+VIRAL VIDEO TO BEND:
+Title: ${video.title}
+Views: ${video.estimatedViews || 'unknown'}
+What makes it work: ${video.formula}
+Hook type: ${video.hookType || 'unknown'}
+
+SOURCE NICHE: ${state.lastSrcNiche}
+TARGET NICHE: ${targetNiche}
+${angle ? `Additional constraint: ${angle}` : ''}
+${channel ? `\nCHANNEL CONTEXT:\n${channel}` : ''}
+
+Generate exactly ${count} YouTube video ideas that bend this formula into the target niche. Each idea should feel like it COULD go viral because it uses the same proven structure — just in a different niche.
+
+Return ONLY valid JSON array, no markdown fences:
+[
+  {
+    "titleOptions": ["Title Option A", "Title Option B", "Title Option C"],
+    "hookLine": "The exact first line of the video — must stop the scroll",
+    "thumbnailConcept": "Specific description: background color/image, text overlay (exact words), expression/element in frame, style notes",
+    "whyItWorks": "2 sentences: why this bend works and what emotional trigger it hits",
+    "scriptOutline": {
+      "hook": "0:00–0:30 — exact hook approach and first lines to say",
+      "problem": "0:30–2:00 — what problem or tension to establish and how",
+      "body": "2:00–8:00 — main content structure, key points to hit in order, any pattern interrupts",
+      "climax": "8:00–10:00 — the payoff moment, the reveal or insight that makes it worth watching",
+      "cta": "10:00–end — how to close, what to ask viewers to do and why they will"
+    }
+  }
+]`,
+      'You are a YouTube viral formula expert. Return only valid JSON, no commentary, no markdown.'
+    );
+
+    let bends = [];
+    try {
+      bends = JSON.parse(result.replace(/```json|```/g,'').trim());
+    } catch {
+      toast('Parse error — try again.'); setBendLoading(false); return;
+    }
+
+    state.bendResults = bends;
+    state.lastTargetNiche = targetNiche;
+
+    // Seed chat
+    state.chatHistory = [
+      {
+        role: 'system',
+        content: `You are a YouTube niche bending expert and scriptwriter. The user just bent a viral formula from "${state.lastSrcNiche}" into "${targetNiche}".
+
+Original viral video: "${video.title}" — what makes it work: ${video.formula}
+${channel ? `\nChannel context:\n${channel}` : ''}
+
+You generated ${count} bent video ideas. Help the user refine them, generate more ideas, write full scripts, explore other niches, or improve titles. Always be specific and actionable.`
+      },
+      {
+        role: 'assistant',
+        content: `I've generated ${count} bent video ideas for the ${targetNiche} niche using the "${video.title}" formula. Want me to write a full script for any of them, generate more angles, or bend the formula into another niche?`
+      }
+    ];
+
+    renderBendCards(bends);
+    document.getElementById('bend-outputs').style.display = 'block';
+    document.getElementById('bend-outputs').scrollIntoView({ behavior:'smooth', block:'start' });
+    appendBendChat('assistant', state.chatHistory[1].content);
+
+  } catch(err) {
+    toast('Error: ' + err.message);
+  } finally {
+    setBendLoading(false);
+  }
+}
+
+function setBendLoading(on, msg='') {
+  document.getElementById('bend-loading').style.display = on ? '' : 'none';
+  document.getElementById('bend-status').textContent = msg;
+  document.getElementById('bend-btn').disabled = on;
+  document.getElementById('bend-btn').textContent = on ? 'Bending…' : 'Bend this formula ⟳';
+}
+
+function renderBendCards(bends) {
+  const container = document.getElementById('bend-cards');
+  container.innerHTML = bends.map((b, i) => `
+    <div class="bend-output">
+      <div class="bend-header">
+        <div class="bend-header-left">
+          <span style="color:var(--accent);font-size:18px;font-weight:800;">#${i+1}</span>
+          ${esc(b.whyItWorks || '')}
+        </div>
+      </div>
+      <div class="bend-body">
+
+        <!-- Titles -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">TITLE OPTIONS</div>
+          <div class="title-options">
+            ${(b.titleOptions||[]).map(t=>`
+              <div class="title-opt">
+                <span>${esc(t)}</span>
+                <button class="title-opt-copy" onclick="copyText('${esc(t)}')">Copy</button>
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <!-- Hook line -->
+        <div style="margin-bottom:16px;padding:12px 14px;background:var(--accent-dim);border-radius:var(--rsm);border-left:3px solid var(--accent);">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);margin-bottom:5px;">OPENING HOOK LINE</div>
+          <div style="font-size:14.5px;font-weight:600;color:var(--accent-text);">"${esc(b.hookLine||'')}"</div>
+        </div>
+
+        <!-- Thumbnail -->
+        <div style="margin-bottom:16px;">
+          <div class="thumbnail-box">
+            <div class="thumbnail-box-label">🖼 Thumbnail concept</div>
+            <div class="thumbnail-box-body">${esc(b.thumbnailConcept||'')}</div>
+          </div>
+        </div>
+
+        <!-- Script outline -->
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">SCRIPT OUTLINE</div>
+          ${b.scriptOutline ? Object.entries(b.scriptOutline).map(([k,v])=>`
+            <div class="script-section">
+              <div class="script-section-label">${k.toUpperCase()}</div>
+              <div class="script-section-body">${esc(v)}</div>
+            </div>`).join('') : ''}
+        </div>
+
+        <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="copyBend(${i})">Copy all ↑</button>
+          <button class="btn btn-sm btn-ghost" onclick="requestFullScript(${i})">Write full script →</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Copied!'));
+}
+
+function copyBend(i) {
+  const b = state.bendResults[i];
+  if (!b) return;
+  const text = [
+    `TITLES:\n${(b.titleOptions||[]).join('\n')}`,
+    `\nHOOK LINE:\n"${b.hookLine}"`,
+    `\nTHUMBNAIL:\n${b.thumbnailConcept}`,
+    `\nWHY IT WORKS:\n${b.whyItWorks}`,
+    `\nSCRIPT OUTLINE:`,
+    ...Object.entries(b.scriptOutline||{}).map(([k,v])=>`\n${k.toUpperCase()}:\n${v}`),
+  ].join('\n');
+  navigator.clipboard.writeText(text).then(() => toast('Copied!'));
+}
+
+function requestFullScript(i) {
+  const b = state.bendResults[i];
+  if (!b) return;
+  const input = document.getElementById('bend-chat-input');
+  input.value = `Write a full word-for-word script for idea #${i+1}: "${(b.titleOptions||[''])[0]}"`;
+  sendBendChat();
+}
+
+// ══════════════════════════════════════════════
+// BEND CHAT
+// ══════════════════════════════════════════════
+function bendChatKey(e) {
+  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendBendChat(); }
+}
+
+async function sendBendChat() {
+  const input = document.getElementById('bend-chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const groqKey = getKey('groq'); if (!groqKey) return;
+
+  input.value = '';
+  appendBendChat('user', msg);
+  state.chatHistory.push({ role:'user', content:msg });
+
+  const typingEl = appendBendChat('assistant', '…');
+  try {
+    const reply = await groqChat(state.chatHistory);
+    state.chatHistory.push({ role:'assistant', content:reply });
+    typingEl.textContent = reply;
+    document.getElementById('bend-chat-messages').scrollTop = 9999;
+  } catch(err) {
+    typingEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+function appendBendChat(role, text) {
+  const wrap = document.getElementById('bend-chat-messages');
+  const div = document.createElement('div');
+  div.className = `msg msg-${role}`;
+  div.textContent = text;
+  wrap.appendChild(div);
+  wrap.scrollTop = 9999;
+  return div;
+}
+
+// ══════════════════════════════════════════════
+// SAVE BEND
+// ══════════════════════════════════════════════
+function saveBend() {
+  const saves = S.get('saved_bends') || [];
+  saves.unshift({
+    id: Date.now(),
+    srcNiche: state.lastSrcNiche,
+    targetNiche: state.lastTargetNiche,
+    video: state.foundVideos[state.selectedVideo],
+    results: state.bendResults,
+    date: new Date().toLocaleDateString(),
+  });
+  S.set('saved_bends', saves.slice(0,20));
+  toast('Saved!');
+}
+
+function renderSaved() {
+  const saves = S.get('saved_bends') || [];
+  const list = document.getElementById('saved-list');
+  const empty = document.getElementById('saved-empty');
+  if (!saves.length) { list.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  list.innerHTML = saves.map(s => `
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <div style="font-size:14px;font-weight:700;">${esc(s.srcNiche)} → ${esc(s.targetNiche)}</div>
+          <div style="font-size:12px;color:var(--muted);">Based on: ${esc(s.video?.title||'unknown')} · ${s.date}</div>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="deleteSave(${s.id})" style="color:var(--red);">Delete</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${(s.results||[]).map((r,i)=>`
+          <div style="font-size:13.5px;padding:8px 12px;background:var(--s2);border-radius:var(--rsm);border:1px solid var(--border);">
+            <strong style="color:var(--accent-text);">#${i+1}</strong> ${esc((r.titleOptions||[''])[0])}
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function deleteSave(id) {
+  const saves = (S.get('saved_bends')||[]).filter(s=>s.id!==id);
+  S.set('saved_bends', saves);
+  renderSaved();
+  toast('Deleted.');
+}
+
+// ══════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════
+function esc(s) {
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+loadKeys();
+loadChannel();
+</script>
+</body>
+</html>
