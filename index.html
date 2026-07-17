@@ -223,34 +223,58 @@ hr{border:none;border-top:1px solid var(--border);margin:22px 0;}
       </div>
     </div>
 
-    <!-- Step 2: Find videos -->
+<!-- Step 2: Find videos -->
     <div class="card">
       <div class="card-title">Step 2 — Find viral videos to bend</div>
-      <div class="field-row" style="margin-bottom:12px;">
-        <div>
-          <label for="min-views">Minimum views</label>
-          <select id="min-views">
-            <option value="100000">100K+</option>
-            <option value="500000" selected>500K+</option>
-            <option value="1000000">1M+</option>
-            <option value="5000000">5M+</option>
-          </select>
+
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-sm" id="mode-auto-btn" onclick="setFindMode('auto')">🔍 Search for me</button>
+        <button class="btn btn-sm btn-ghost" id="mode-manual-btn" onclick="setFindMode('manual')">🔗 I already found one</button>
+      </div>
+
+      <!-- Auto search mode -->
+      <div id="mode-auto">
+        <div class="field-row" style="margin-bottom:12px;">
+          <div>
+            <label for="min-views">Minimum views</label>
+            <select id="min-views">
+              <option value="100000">100K+</option>
+              <option value="500000" selected>500K+</option>
+              <option value="1000000">1M+</option>
+              <option value="5000000">5M+</option>
+            </select>
+          </div>
+          <div>
+            <label for="recency">Recency</label>
+            <select id="recency">
+              <option value="any">Any time</option>
+              <option value="year" selected>Past year</option>
+              <option value="month">Past month</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label for="recency">Recency</label>
-          <select id="recency">
-            <option value="any">Any time</option>
-            <option value="year" selected>Past year</option>
-            <option value="month">Past month</option>
-          </select>
+        <button class="btn btn-primary" onclick="findVideos()" id="find-btn">
+          Find viral videos ⚡
+        </button>
+        <div id="find-loading" style="display:none;margin-top:12px;">
+          <div class="loading-bar"></div>
+          <div class="status-text" id="find-status"></div>
         </div>
       </div>
-      <button class="btn btn-primary" onclick="findVideos()" id="find-btn">
-        Find viral videos ⚡
-      </button>
-      <div id="find-loading" style="display:none;margin-top:12px;">
-        <div class="loading-bar"></div>
-        <div class="status-text" id="find-status"></div>
+
+      <!-- Manual URL mode -->
+      <div id="mode-manual" style="display:none;">
+        <div class="field">
+          <label for="manual-url">Paste the YouTube video URL you found</label>
+          <input type="url" id="manual-url" placeholder="https://www.youtube.com/watch?v=…" />
+        </div>
+        <button class="btn btn-primary" onclick="analyzeVideoUrl()" id="analyze-url-btn">
+          Analyze this video ⚡
+        </button>
+        <div id="analyze-url-loading" style="display:none;margin-top:12px;">
+          <div class="loading-bar"></div>
+          <div class="status-text" id="analyze-url-status"></div>
+        </div>
       </div>
     </div>
 
@@ -261,6 +285,7 @@ hr{border:none;border-top:1px solid var(--border);margin:22px 0;}
         <button class="btn btn-sm btn-ghost" onclick="findVideos()">Refresh ↺</button>
       </div>
       <div class="video-grid" id="video-grid"></div>
+      <div id="keyword-tips-wrap" style="display:none;margin-bottom:20px;"></div>
 
       <!-- Step 3: Bend settings -->
       <div class="card" id="bend-settings" style="display:none;">
@@ -502,6 +527,26 @@ function channelContext() {
 // ══════════════════════════════════════════════
 // TAVILY SEARCH
 // ══════════════════════════════════════════════
+async function tavilyExtract(url) {
+  const key = getKey('tavily'); if (!key) throw new Error('No Tavily key');
+  const res = await fetch('https://api.tavily.com/extract', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: key, urls: [url] })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  const result = (data.results || [])[0];
+  if (!result) throw new Error('Could not read that page — check the URL and try again.');
+  return result; // { url, raw_content, ... }
+}
+
+function setFindMode(mode) {
+  document.getElementById('mode-auto').style.display = mode === 'auto' ? '' : 'none';
+  document.getElementById('mode-manual').style.display = mode === 'manual' ? '' : 'none';
+  document.getElementById('mode-auto-btn').classList.toggle('btn-ghost', mode !== 'auto');
+  document.getElementById('mode-manual-btn').classList.toggle('btn-ghost', mode !== 'manual');
+}
 async function tavilySearch(query, options = {}) {
   const key = getKey('tavily'); if (!key) throw new Error('No Tavily key');
   const body = {
@@ -647,7 +692,83 @@ const analysis = await groq(
   }
 }
 
-function setFindLoading(on, msg='') {
+async function analyzeVideoUrl() {
+  const url = document.getElementById('manual-url').value.trim();
+  if (!url) { toast('Paste a YouTube URL first.'); return; }
+  if (!/youtube\.com|youtu\.be/.test(url)) { toast('That doesn\'t look like a YouTube link.'); return; }
+  const groqKey = getKey('groq'); if (!groqKey) return;
+
+  setAnalyzeUrlLoading(true, 'Reading the video page…');
+
+  try {
+    const page = await tavilyExtract(url);
+    const content = (page.raw_content || '').slice(0, 4000);
+    if (!content.trim()) throw new Error('Page had no readable content — video may be private or region-locked.');
+
+    setAnalyzeUrlLoading(true, 'Breaking down the viral formula…');
+
+    const analysis = await groq(
+      `Here is the page content for a YouTube video someone found and wants to analyse:\n\nURL: ${url}\n\nPAGE CONTENT:\n${content}\n\n` +
+      `STRICT RULES:\n` +
+      `1. Only report a view count if a specific number is explicitly present in the content above. Otherwise set "estimatedViews" to null — never guess.\n` +
+      `2. Identify the actual title and channel from the content, don't invent them.\n` +
+      `3. "niche" should be your best short label for what content category/niche this video belongs to (2-5 words).\n\n` +
+      `Also generate:\n` +
+      `- "keywords": 6-8 specific YouTube search phrases someone could type into YouTube's search bar to find more videos like this one in the same niche.\n` +
+      `- "filterTips": a short paragraph (3-4 sentences) explaining exactly how to use YouTube's own search filters (the Filters button under the search bar: Upload date, Type, Duration, Sort by) to narrow those keyword searches down to genuinely viral, recent hits — be specific about which filter settings to pick and why, tailored to this niche.\n\n` +
+      `Return ONLY valid JSON, no markdown:\n{\n  "title": "actual title",\n  "url": "${url}",\n  "estimatedViews": "exact number from content or null",\n  "channel": "channel name or null",\n  "niche": "short niche label",\n  "formula": "2-3 sentences on what makes this video work — hook style, structure, emotional driver",\n  "hookType": "one of: curiosity gap / before-after / controversy / simulation / forbidden knowledge / scale & spectacle / expert reveals",\n  "keywords": ["...", "..."],\n  "filterTips": "..."\n}`,
+      'You are a YouTube viral content analyst. You never fabricate view counts or facts not present in the source. Return only valid JSON, no commentary, no markdown fences.'
+    );
+
+    let video;
+    try {
+      video = JSON.parse(analysis.replace(/```json|```/g,'').trim());
+    } catch {
+      toast('Could not parse the analysis. Try again.'); setAnalyzeUrlLoading(false); return;
+    }
+
+    state.foundVideos = [video];
+    state.selectedVideo = 0;
+    state.lastSrcNiche = video.niche || document.getElementById('src-niche').value.trim() || 'this niche';
+
+    renderVideoGrid(state.foundVideos);
+    renderKeywordTips(video);
+    document.getElementById('video-results-wrap').style.display = 'block';
+    selectVideo(0);
+    document.getElementById('video-results-wrap').scrollIntoView({ behavior:'smooth', block:'start' });
+
+  } catch(err) {
+    toast('Error: ' + err.message);
+  } finally {
+    setAnalyzeUrlLoading(false);
+  }
+}
+
+function setAnalyzeUrlLoading(on, msg='') {
+  document.getElementById('analyze-url-loading').style.display = on ? '' : 'none';
+  document.getElementById('analyze-url-status').textContent = msg;
+  document.getElementById('analyze-url-btn').disabled = on;
+  document.getElementById('analyze-url-btn').textContent = on ? 'Analyzing…' : 'Analyze this video ⚡';
+}
+
+function renderKeywordTips(video) {
+  const wrap = document.getElementById('keyword-tips-wrap');
+  if (!video.keywords && !video.filterTips) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div class="card">
+      <div class="card-title">Find more like this on YouTube</div>
+      ${video.keywords ? `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Try searching these on YouTube:</div>
+        <div class="niche-tags" style="margin-bottom:14px;">
+          ${video.keywords.map(k => `<button class="ntag" onclick="copyText('${esc(k)}')" title="Click to copy">${esc(k)}</button>`).join('')}
+        </div>` : ''}
+      ${video.filterTips ? `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">How to filter for the real hits:</div>
+        <div style="font-size:13.5px;line-height:1.6;">${esc(video.filterTips)}</div>` : ''}
+    </div>`;
+}
+  function setFindLoading(on, msg='') {
   document.getElementById('find-loading').style.display = on ? '' : 'none';
   document.getElementById('find-status').textContent = msg;
   document.getElementById('find-btn').disabled = on;
@@ -957,6 +1078,7 @@ function esc(s) {
 // ══════════════════════════════════════════════
 loadKeys();
 loadChannel();
+setFindMode('auto');
 </script>
 </body>
 </html>
